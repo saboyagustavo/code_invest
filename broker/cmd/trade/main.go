@@ -20,8 +20,7 @@ func main() {
 
 	kafkaMsgChan := make(chan *ckafka.Message)
 	configMap := &ckafka.ConfigMap{
-		// TODO: add to .env
-		"bootsrap.servers":  "host.docker.internal:9094",
+		"bootstrap.servers": "host.docker.internal:9094",
 		"group.id":          "myGroup",
 		"auto.offset.reset": "earliest",
 	}
@@ -29,7 +28,7 @@ func main() {
 	producer := kafka.NewProducer(configMap)
 	kafka := kafka.NewConsumer(configMap, []string{"input"})
 
-	go kafka.Consume(kafkaMsgChan) // Thread 2
+	go kafka.Consume(kafkaMsgChan) // T2
 
 	/*
 		receives from kafka channel,
@@ -39,17 +38,17 @@ func main() {
 		then publishes it in Kafka
 	*/
 	book := entity.NewBook(ordersIn, ordersOut, wg)
-	go book.Trade() // Thread 3
+	go book.Trade() // T3
 
 	go func() {
 		for msg := range kafkaMsgChan {
 			wg.Add(1)
+			fmt.Println(string(msg.Value))
 			tradeInput := dto.TradeInput{}
 			err := json.Unmarshal(msg.Value, &tradeInput)
 			if err != nil {
 				panic(err)
 			}
-
 			order := transformer.TransformInput(tradeInput)
 			ordersIn <- order
 		}
@@ -58,10 +57,10 @@ func main() {
 	for res := range ordersOut {
 		output := transformer.TransformOutput(res)
 		outputJson, err := json.MarshalIndent(output, "", "  ")
+		fmt.Println(string(outputJson))
 		if err != nil {
 			fmt.Println(err)
 		}
-
 		producer.Publish(outputJson, []byte("orders"), "output")
 	}
 }
